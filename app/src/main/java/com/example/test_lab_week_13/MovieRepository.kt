@@ -1,5 +1,6 @@
 package com.example.test_lab_week_13
 
+import android.util.Log
 import com.example.test_lab_week_13.api.MovieService
 import com.example.test_lab_week_13.database.MovieDao
 import com.example.test_lab_week_13.database.MovieDatabase
@@ -17,26 +18,35 @@ class MovieRepository(
     // API key kamu
     private val apiKey = "4ebb92bb9df6dd74c5c162ab29810a81"
 
-    // Sekarang: cek dulu DB, kalau kosong baru call API dan simpan ke DB
+    // Cek DB dulu; kalau kosong baru fetch dari API dan simpan ke DB
     fun fetchMovies(): Flow<List<Movie>> {
         return flow {
-            // Check if there are movies saved in the database
             val movieDao: MovieDao = movieDatabase.movieDao()
             val savedMovies = movieDao.getMovies()
 
             if (savedMovies.isEmpty()) {
-                // Tidak ada di DB → fetch dari API
                 val movies = movieService.getPopularMovies(apiKey).results
-
-                // Simpan hasil API ke DB
                 movieDao.addMovies(movies)
-
-                // Emit data dari API
                 emit(movies)
             } else {
-                // Ada di DB → langsung emit dari DB
                 emit(savedMovies)
             }
         }.flowOn(Dispatchers.IO)
+    }
+
+    // fetch movies dari API lalu simpan ke database
+    // dipakai WorkManager untuk refresh data berkala
+    suspend fun fetchMoviesFromNetwork() {
+        val movieDao: MovieDao = movieDatabase.movieDao()
+        try {
+            val popularMovies = movieService.getPopularMovies(apiKey)
+            val moviesFetched = popularMovies.results
+            movieDao.addMovies(moviesFetched)
+        } catch (exception: Exception) {
+            Log.d(
+                "MovieRepository",
+                "An error occurred: ${exception.message}"
+            )
+        }
     }
 }
